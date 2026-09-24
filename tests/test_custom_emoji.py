@@ -47,6 +47,17 @@ class CustomEmojiEntityTest(unittest.TestCase):
             ],
         )
 
+    def test_reminder_emojis_use_requested_ids(self):
+        entities = build_custom_emoji_entities("📉 🔥 ✌️")
+        self.assertEqual(
+            [entity.custom_emoji_id for entity in entities],
+            [
+                "5361748661640372834",
+                "5420315771991497307",
+                "5469986291380657759",
+            ],
+        )
+
     def test_invite_link_can_be_bolded(self):
         text = ensure_rtl(
             "🔗 لینک ورود VIP\nhttps://t.me/+ExampleInvite"
