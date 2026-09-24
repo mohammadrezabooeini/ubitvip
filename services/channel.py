@@ -15,14 +15,23 @@ class ChannelManager:
     def __init__(self, channel_id: str = CHANNEL_ID) -> None:
         self.channel_id: str = channel_id
 
-    async def create_invite_link(self, bot: Bot) -> str:
+    async def create_invite_link(
+        self,
+        bot: Bot,
+        expire_seconds: int | None = None,
+    ) -> str:
         """Create a one-time invite that expires with the check interval."""
+        lifetime = (
+            INVITE_EXPIRE_SECONDS
+            if expire_seconds is None
+            else expire_seconds
+        )
 
         async def _create():
             return await bot.create_chat_invite_link(
                 chat_id=self.channel_id,
                 member_limit=1,
-                expire_date=int(time.time()) + INVITE_EXPIRE_SECONDS,
+                expire_date=int(time.time()) + lifetime,
                 creates_join_request=False,
             )
 

@@ -80,6 +80,38 @@ class Database:
                     )
                     """
                 )
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS bot_settings(
+                        key   TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                    """
+                )
+                await conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO bot_settings(key, value)
+                    VALUES(?, ?)
+                    """,
+                    (
+                        ("minimum_balance", "50"),
+                        ("trial_enabled", "0"),
+                        ("trial_generation", "0"),
+                    ),
+                )
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS vip_trials(
+                        telegram_id INTEGER NOT NULL,
+                        generation  INTEGER NOT NULL,
+                        invite_link TEXT,
+                        started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                        expires_at  TEXT NOT NULL,
+                        status      TEXT NOT NULL DEFAULT 'active',
+                        PRIMARY KEY(telegram_id, generation)
+                    )
+                    """
+                )
                 await conn.commit()
 
             logger.info("Database initialized successfully.")
@@ -158,6 +190,14 @@ class Database:
                             telegram_id,
                         ),
                     )
+                    await conn.execute(
+                        """
+                        UPDATE vip_trials
+                        SET status='upgraded', invite_link=NULL
+                        WHERE telegram_id=? AND status='active'
+                        """,
+                        (telegram_id,),
+                    )
                     await conn.commit()
                     logger.info(
                         "User reactivated: telegram_id=%s, uid=%s",
@@ -190,6 +230,14 @@ class Database:
                         balance,
                         invite_link,
                     ),
+                )
+                await conn.execute(
+                    """
+                    UPDATE vip_trials
+                    SET status='upgraded', invite_link=NULL
+                    WHERE telegram_id=? AND status='active'
+                    """,
+                    (telegram_id,),
                 )
                 await conn.commit()
 
@@ -633,6 +681,269 @@ class Database:
                 return await cursor.fetchone()
         except Exception:
             logger.exception("Get campaign error")
+            raise
+
+    async def get_minimum_balance(self) -> float:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT value
+                    FROM bot_settings
+                    WHERE key='minimum_balance'
+                    """
+                )
+                row = await cursor.fetchone()
+                return float(row["value"]) if row else 50.0
+        except Exception:
+            logger.exception("Get minimum balance setting error")
+            raise
+
+    async def set_minimum_balance(self, value: float) -> None:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute(
+                    """
+                    INSERT INTO bot_settings(key, value)
+                    VALUES('minimum_balance', ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                    """,
+                    (str(value),),
+                )
+                await conn.commit()
+        except Exception:
+            logger.exception("Set minimum balance setting error")
+            raise
+
+    async def get_trial_state(self) -> dict:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT key, value
+                    FROM bot_settings
+                    WHERE key IN ('trial_enabled', 'trial_generation')
+                    """
+                )
+                values = {
+                    row["key"]: row["value"]
+                    for row in await cursor.fetchall()
+                }
+                return {
+                    "enabled": values.get("trial_enabled", "0") == "1",
+                    "generation": int(
+                        values.get("trial_generation", "0")
+                    ),
+                }
+        except Exception:
+            logger.exception("Get trial state error")
+            raise
+
+    async def toggle_trial(self) -> dict:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute("BEGIN IMMEDIATE")
+                cursor = await conn.execute(
+                    """
+                    SELECT key, value
+                    FROM bot_settings
+                    WHERE key IN ('trial_enabled', 'trial_generation')
+                    """
+                )
+                values = {
+                    row["key"]: row["value"]
+                    for row in await cursor.fetchall()
+                }
+                was_enabled = values.get("trial_enabled", "0") == "1"
+                generation = int(
+                    values.get("trial_generation", "0")
+                )
+                enabled = not was_enabled
+                if enabled:
+                    generation += 1
+
+                await conn.execute(
+                    """
+                    UPDATE bot_settings
+                    SET value=?
+                    WHERE key='trial_enabled'
+                    """,
+                    ("1" if enabled else "0",),
+                )
+                await conn.execute(
+                    """
+                    UPDATE bot_settings
+                    SET value=?
+                    WHERE key='trial_generation'
+                    """,
+                    (str(generation),),
+                )
+                await conn.commit()
+                return {
+                    "enabled": enabled,
+                    "generation": generation,
+                }
+        except Exception:
+            logger.exception("Toggle trial setting error")
+            raise
+
+    async def get_active_trial(
+        self,
+        telegram_id: int,
+    ) -> Optional[UserRow]:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT *
+                    FROM vip_trials
+                    WHERE telegram_id=? AND status='active'
+                    ORDER BY generation DESC
+                    LIMIT 1
+                    """,
+                    (telegram_id,),
+                )
+                return await cursor.fetchone()
+        except Exception:
+            logger.exception("Get active trial error")
+            raise
+
+    async def register_trial(
+        self,
+        telegram_id: int,
+        invite_link: str,
+    ) -> str:
+        """Return created, disabled, active, or already_used."""
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute("BEGIN IMMEDIATE")
+                cursor = await conn.execute(
+                    """
+                    SELECT key, value
+                    FROM bot_settings
+                    WHERE key IN ('trial_enabled', 'trial_generation')
+                    """
+                )
+                values = {
+                    row["key"]: row["value"]
+                    for row in await cursor.fetchall()
+                }
+                if values.get("trial_enabled", "0") != "1":
+                    await conn.rollback()
+                    return "disabled"
+                generation = int(
+                    values.get("trial_generation", "0")
+                )
+
+                active_cursor = await conn.execute(
+                    """
+                    SELECT 1
+                    FROM vip_trials
+                    WHERE telegram_id=? AND status='active'
+                    LIMIT 1
+                    """,
+                    (telegram_id,),
+                )
+                if await active_cursor.fetchone():
+                    await conn.rollback()
+                    return "active"
+
+                used_cursor = await conn.execute(
+                    """
+                    SELECT 1
+                    FROM vip_trials
+                    WHERE telegram_id=? AND generation=?
+                    """,
+                    (telegram_id, generation),
+                )
+                if await used_cursor.fetchone():
+                    await conn.rollback()
+                    return "already_used"
+
+                await conn.execute(
+                    """
+                    INSERT INTO vip_trials(
+                        telegram_id,
+                        generation,
+                        invite_link,
+                        expires_at
+                    )
+                    VALUES(
+                        ?, ?, ?, datetime('now', '+1 hour')
+                    )
+                    """,
+                    (telegram_id, generation, invite_link),
+                )
+                await conn.commit()
+                return "created"
+        except sqlite3.IntegrityError:
+            return "already_used"
+        except Exception:
+            logger.exception("Register trial error")
+            raise
+
+    async def clear_trial_invite_link(
+        self,
+        telegram_id: int,
+    ) -> None:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute(
+                    """
+                    UPDATE vip_trials
+                    SET invite_link=NULL
+                    WHERE telegram_id=? AND status='active'
+                    """,
+                    (telegram_id,),
+                )
+                await conn.commit()
+        except Exception:
+            logger.exception("Clear trial invite link error")
+            raise
+
+    async def get_expired_trials(self) -> List[UserRow]:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT *
+                    FROM vip_trials
+                    WHERE status='active'
+                      AND expires_at <= datetime('now')
+                    """
+                )
+                return await cursor.fetchall()
+        except Exception:
+            logger.exception("Get expired trials error")
+            raise
+
+    async def mark_trial_expired(
+        self,
+        telegram_id: int,
+        generation: int,
+    ) -> None:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute(
+                    """
+                    UPDATE vip_trials
+                    SET status='expired', invite_link=NULL
+                    WHERE telegram_id=? AND generation=?
+                    """,
+                    (telegram_id, generation),
+                )
+                await conn.commit()
+        except Exception:
+            logger.exception("Mark trial expired error")
             raise
 
 
