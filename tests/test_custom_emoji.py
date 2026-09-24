@@ -5,12 +5,10 @@ from aiogram.methods import SendMessage
 from bot.keyboards import admin_menu, main_menu
 from services.custom_emoji import (
     CUSTOM_EMOJI_IDS,
-    START_CUSTOM_EMOJI_ID,
     CustomEmojiMiddleware,
     build_bold_entity,
     build_custom_emoji_entities,
     ensure_rtl,
-    start_custom_emoji_entity,
 )
 
 
@@ -72,13 +70,6 @@ class CustomEmojiEntityTest(unittest.TestCase):
         self.assertEqual(lines[1], "")
         self.assertTrue(lines[2].startswith("\u200f"))
 
-    def test_start_emoji_uses_requested_id(self):
-        entity = start_custom_emoji_entity()
-        self.assertEqual(entity.offset, 0)
-        self.assertEqual(entity.length, 1)
-        self.assertEqual(entity.custom_emoji_id, START_CUSTOM_EMOJI_ID)
-
-
 class CustomEmojiMiddlewareTest(unittest.IsolatedAsyncioTestCase):
     async def test_outgoing_message_receives_custom_entities(self):
         method = SendMessage(chat_id=1, text="✅ انجام شد")
@@ -95,11 +86,11 @@ class CustomEmojiMiddlewareTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_existing_entities_are_preserved(self):
-        start_entity = start_custom_emoji_entity()
+        existing_entity = build_custom_emoji_entities("✅")[0]
         method = SendMessage(
             chat_id=1,
-            text="⭐",
-            entities=[start_entity],
+            text="✅",
+            entities=[existing_entity],
         )
         middleware = CustomEmojiMiddleware()
 
@@ -107,7 +98,7 @@ class CustomEmojiMiddlewareTest(unittest.IsolatedAsyncioTestCase):
             return outgoing_method
 
         result = await middleware(make_request, None, method)
-        self.assertEqual(result.entities, [start_entity])
+        self.assertEqual(result.entities, [existing_entity])
 
     async def test_plain_message_is_made_right_to_left(self):
         method = SendMessage(chat_id=1, text="پیام بدون ایموجی")

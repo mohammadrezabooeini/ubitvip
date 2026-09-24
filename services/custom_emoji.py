@@ -34,8 +34,6 @@ CUSTOM_EMOJI_IDS = {
     "⬅️": "5469735272017043817",
 }
 
-START_CUSTOM_EMOJI_ID = "6025887340180805506"
-START_CUSTOM_EMOJI_FALLBACK = "⭐"
 RTL_MARK = "\u200f"
 
 
@@ -94,15 +92,6 @@ def build_bold_entity(text: str, value: str) -> MessageEntity:
         type="bold",
         offset=_utf16_length(text[:index]),
         length=_utf16_length(value),
-    )
-
-
-def start_custom_emoji_entity() -> MessageEntity:
-    return MessageEntity(
-        type="custom_emoji",
-        offset=0,
-        length=_utf16_length(START_CUSTOM_EMOJI_FALLBACK),
-        custom_emoji_id=START_CUSTOM_EMOJI_ID,
     )
 
 
