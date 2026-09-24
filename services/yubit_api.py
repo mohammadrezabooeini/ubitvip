@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlencode
 
 import aiohttp
+from yarl import URL
 
 from config import (
     UID_MAX_LENGTH,
@@ -37,8 +38,8 @@ def encode_json_body(payload: Dict[str, Any]) -> str:
 
 
 def encode_query(params: Dict[str, Any]) -> str:
-    """Encode exactly as Yubit's signed URL examples (%20, not +)."""
-    return urlencode(params, quote_via=quote)
+    """Match Yubit's examples: spaces as %20, time colons unchanged."""
+    return urlencode(params, quote_via=quote, safe=":")
 
 
 def _is_success(code: Any) -> bool:
@@ -133,7 +134,7 @@ class YubitAPI:
         try:
             async with session.request(
                 method,
-                url,
+                URL(url, encoded=True),
                 data=payload.encode("utf-8") if method == "POST" else None,
                 headers=headers,
             ) as response:

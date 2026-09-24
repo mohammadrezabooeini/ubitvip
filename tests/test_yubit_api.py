@@ -25,7 +25,7 @@ class YubitSignatureTest(unittest.TestCase):
                     "start_time": "2026-09-24 00:00:00",
                 }
             ),
-            "uid=123&start_time=2026-09-24%2000%3A00%3A00",
+            "uid=123&start_time=2026-09-24%2000:00:00",
         )
 
     def test_v2_signature_uses_documented_field_order(self):
