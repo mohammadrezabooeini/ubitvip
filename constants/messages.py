@@ -123,21 +123,39 @@ STATUS_INFO: str = (
 )
 
 # ──────────────────────────────
-# Bonus
+# Campaign
 # ──────────────────────────────
 
-BONUS_MSG: str = (
-    "🎁\n\n"
-    "{bonus_text}"
+CAMPAIGN_EMPTY: str = (
+    "در حال حاضر رویداد یا کمپینی در جریان نیست."
 )
 
 # ──────────────────────────────
 # Support
 # ──────────────────────────────
 
-SUPPORT_MSG: str = (
-    "☎️ ارتباط با پشتیبانی:\n"
-    "@{support_username}"
+SUPPORT_PROMPT: str = (
+    "☎️ پیام خود را برای پشتیبانی ارسال کنید.\n\n"
+    "می‌توانید متن، عکس، ویدیو، فایل یا پیام فورواردشده بفرستید."
+)
+
+SUPPORT_RECEIVED: str = (
+    "✅ پیام شما برای پشتیبانی ارسال شد.\n"
+    "پاسخ از همین ربات برای شما ارسال خواهد شد."
+)
+
+SUPPORT_ADMIN_HEADER: str = (
+    "📨 پیام جدید پشتیبانی\n\n"
+    "نام: {first_name}\n"
+    "نام کاربری: {username}\n"
+    "Telegram ID: {telegram_id}\n\n"
+    "برای پاسخ، روی پیام بعدی Reply کنید."
+)
+
+SUPPORT_REPLY_HEADER: str = "📨 پاسخ پشتیبانی:"
+
+SUPPORT_DELIVERY_FAILED: str = (
+    "⚠️ ارسال پیام به پشتیبانی انجام نشد. لطفاً کمی بعد تلاش کنید."
 )
 
 # ──────────────────────────────
@@ -247,8 +265,16 @@ ADMIN_USER_INFO: str = (
 )
 
 ADMIN_BROADCAST_PROMPT: str = (
-    "پیامی که می‌خواهید برای همه کاربران ارسال شود بفرستید.\n\n"
-    "متن، عکس، ویدیو و فایل پشتیبانی می‌شود."
+    "📢 محتوای همگانی را ارسال کنید\n\n"
+    "✅ پشتیبانی کامل از:\n"
+    "• متن\n"
+    "• عکس\n"
+    "• ویدیو\n"
+    "• گیف\n"
+    "• فایل\n"
+    "• استیکر\n"
+    "• پیام فوروارد شده\n\n"
+    "⚡️ دقیقا همان پیام برای همه کاربران ارسال خواهد شد."
 )
 
 ADMIN_BROADCAST_PREVIEW: str = (
@@ -330,38 +356,39 @@ ADMIN_EXPORT_CAPTION: str = (
     "تعداد رکوردها: {count}"
 )
 
-ADMIN_VOLUME_USER_PROMPT: str = (
-    "Telegram ID یا UID کاربر را برای بررسی حجم معاملات ارسال کنید."
+ADMIN_CAMPAIGN_PROMPT: str = (
+    "🎁 محتوای کمپین را ارسال کنید.\n\n"
+    "متن، عکس، ویدیو، گیف، فایل و پیام فورواردشده پشتیبانی می‌شود."
 )
 
-ADMIN_VOLUME_DATE_PROMPT: str = (
-    "بازه زمانی را به میلادی و با این قالب ارسال کنید:\n\n"
-    "YYYY-MM-DD YYYY-MM-DD\n\n"
-    "مثال:\n"
-    "2026-08-01 2026-08-31"
+ADMIN_CAMPAIGN_SAVED: str = (
+    "✅ کمپین ذخیره شد و از منوی کاربران قابل مشاهده است."
 )
 
-ADMIN_VOLUME_LOADING: str = (
-    "در حال دریافت حجم معاملات اسپات، فیوچرز و کمیسیون..."
+ADMIN_INVITE_CREATED: str = (
+    "✅ لینک یکبارمصرف ساخته شد:\n\n"
+    "{invite_link}"
 )
 
-ADMIN_VOLUME_REPORT: str = (
-    "گزارش معاملات کاربر\n\n"
-    "UID: {uid}\n"
-    "بازه: {start_date} تا {end_date}\n\n"
-    "حجم اسپات بر اساس جفت‌ارز:\n"
-    "{spot_details}\n\n"
-    "حجم فیوچرز تبدیل‌شده به USDT:\n"
-    "{futures_details}\n"
-    "مجموع فیوچرز: {futures_total} USDT\n\n"
-    "حجم مؤثر تجمیعی: {effective_volume} USDT\n"
-    "کمیسیون ایجادشده: {commission} USDT\n\n"
-    "نکته: طبق مستندات API، معاملات فیوچرز بدون کارمزد "
-    "در حجم فیوچرز محاسبه نمی‌شوند."
+ADMIN_REPORT_LOADING: str = (
+    "⏳ در حال دریافت گزارش کامل حجم و کمیسیون..."
 )
 
-ADMIN_VOLUME_EMPTY: str = "بدون معامله در این بازه"
-ADMIN_VOLUME_DATE_INVALID: str = (
-    "بازه زمانی نامعتبر است. قالب صحیح:\n"
-    "YYYY-MM-DD YYYY-MM-DD"
+ADMIN_REPORT: str = (
+    "📈 گزارش کامل حجم و کمیسیون\n\n"
+    "امروز\n"
+    "حجم اسپات: {today_spot} USDT\n"
+    "حجم فیوچرز: {today_futures} USDT\n"
+    "حجم کل: {today_total} USDT\n"
+    "کمیسیون: {today_commission} USDT\n\n"
+    "۷ روز گذشته\n"
+    "حجم اسپات: {week_spot} USDT\n"
+    "حجم فیوچرز: {week_futures} USDT\n"
+    "حجم کل: {week_total} USDT\n"
+    "کمیسیون: {week_commission} USDT\n\n"
+    "از ابتدای ماه\n"
+    "حجم اسپات: {month_spot} USDT\n"
+    "حجم فیوچرز: {month_futures} USDT\n"
+    "حجم کل: {month_total} USDT\n"
+    "کمیسیون: {month_commission} USDT"
 )

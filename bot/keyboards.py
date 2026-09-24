@@ -46,9 +46,9 @@ def main_menu() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
-                    text="بونس",
+                    text="کمپین",
                     emoji="🎁",
-                    callback_data="bonus",
+                    callback_data="campaign",
                 ),
                 _button(
                     text="پشتیبانی",
@@ -109,15 +109,27 @@ def admin_menu() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
+                    text="تنظیم کمپین",
+                    emoji="🎁",
+                    callback_data="admin:campaign",
+                ),
+                _button(
+                    text="لینک یکبار مصرف",
+                    emoji="🔗",
+                    callback_data="admin:invite",
+                ),
+            ],
+            [
+                _button(
                     text="خروجی Excel",
                     emoji="📥",
                     callback_data="admin:export",
                 ),
                 _button(
-                    text="حجم معاملات",
+                    text="گزارش کامل حجم و کمیسیون",
                     emoji="📈",
-                    callback_data="admin:volume",
-                )
+                    callback_data="admin:report",
+                ),
             ],
             [
                 _button(

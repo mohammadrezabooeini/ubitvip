@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Iterable, List
 
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
@@ -28,8 +28,7 @@ from services.excel_export import build_vip_excel
 from services.yubit_api import validate_uid, yubit
 from services.trading_report import (
     format_decimal,
-    get_trading_report,
-    parse_date_range,
+    get_standard_reports,
 )
 from services.vip_rules import is_insufficient_balance
 
@@ -45,8 +44,20 @@ class AdminStates(StatesGroup):
     waiting_add = State()
     waiting_remove = State()
     confirm_remove = State()
-    waiting_volume_user = State()
-    waiting_volume_dates = State()
+    waiting_campaign = State()
+
+
+class SupportReplyFilter(BaseFilter):
+    async def __call__(self, message: Message) -> bool | dict[str, int]:
+        if message.reply_to_message is None:
+            return False
+        user_id = await db.get_support_user(
+            admin_chat_id=message.chat.id,
+            admin_message_id=message.reply_to_message.message_id,
+        )
+        if user_id is None:
+            return False
+        return {"support_user_id": user_id}
 
 
 @admin_router.message(Command("admin"))
@@ -61,24 +72,35 @@ async def open_admin_panel(
     )
 
 
+@admin_router.message(SupportReplyFilter())
+async def admin_support_reply(
+    message: Message,
+    support_user_id: int,
+    state: FSMContext,
+) -> None:
+    try:
+        await state.clear()
+        await message.bot.send_message(
+            support_user_id,
+            msg.SUPPORT_REPLY_HEADER,
+        )
+        await message.bot.copy_message(
+            chat_id=support_user_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id,
+        )
+        await message.answer("✅ پاسخ برای کاربر ارسال شد.")
+    except Exception:
+        logger.exception(
+            "Admin support reply failed for user_id=%s",
+            support_user_id,
+        )
+        await message.answer(msg.SUPPORT_DELIVERY_FAILED)
+
+
 def _value(row: Any, key: str, default: Any = "-") -> Any:
     value = row[key]
     return default if value is None or value == "" else value
-
-
-def _format_market_rows(values: Any) -> str:
-    if not values:
-        return msg.ADMIN_VOLUME_EMPTY
-
-    items = sorted(values.items())
-    visible = items[:40]
-    lines = [
-        f"{symbol}: {format_decimal(amount)}"
-        for symbol, amount in visible
-    ]
-    if len(items) > len(visible):
-        lines.append(f"... و {len(items) - len(visible)} مورد دیگر")
-    return "\n".join(lines)
 
 
 async def _send_line_chunks(
@@ -540,95 +562,93 @@ async def admin_export_excel(call: CallbackQuery) -> None:
         await call.message.answer(msg.ERROR_GENERIC)
 
 
-@admin_router.callback_query(F.data == "admin:volume")
-async def admin_volume_start(
+@admin_router.callback_query(F.data == "admin:campaign")
+async def admin_campaign_start(
     call: CallbackQuery,
     state: FSMContext,
 ) -> None:
-    await state.set_state(AdminStates.waiting_volume_user)
+    await state.set_state(AdminStates.waiting_campaign)
     await call.message.answer(
-        msg.ADMIN_VOLUME_USER_PROMPT,
+        msg.ADMIN_CAMPAIGN_PROMPT,
         reply_markup=admin_back_keyboard(),
     )
     await call.answer()
 
 
-@admin_router.message(AdminStates.waiting_volume_user)
-async def admin_volume_user(
+@admin_router.message(AdminStates.waiting_campaign)
+async def admin_campaign_save(
     message: Message,
     state: FSMContext,
 ) -> None:
-    identifier = (message.text or "").strip()
-    if not identifier.isdigit():
-        await message.answer(msg.ADMIN_VOLUME_USER_PROMPT)
-        return
-
-    user = await db.find_user(identifier)
-    if user is None:
-        await message.answer(
-            msg.ADMIN_USER_NOT_FOUND,
-            reply_markup=admin_back_keyboard(),
+    try:
+        await db.set_campaign(
+            source_chat_id=message.chat.id,
+            source_message_id=message.message_id,
         )
-        await state.clear()
-        return
-
-    await state.update_data(volume_uid=user["yubit_uid"])
-    await state.set_state(AdminStates.waiting_volume_dates)
-    await message.answer(
-        msg.ADMIN_VOLUME_DATE_PROMPT,
-        reply_markup=admin_back_keyboard(),
-    )
-
-
-@admin_router.message(AdminStates.waiting_volume_dates)
-async def admin_volume_dates(
-    message: Message,
-    state: FSMContext,
-) -> None:
-    try:
-        date_range = parse_date_range((message.text or "").strip())
-    except ValueError:
-        await message.answer(msg.ADMIN_VOLUME_DATE_INVALID)
-        return
-
-    data = await state.get_data()
-    uid = data.get("volume_uid")
-    if not uid:
-        await state.clear()
+        await message.answer(
+            msg.ADMIN_CAMPAIGN_SAVED,
+            reply_markup=admin_menu(),
+        )
+    except Exception:
+        logger.exception("Admin campaign save error")
         await message.answer(msg.ERROR_GENERIC)
-        return
+    finally:
+        await state.clear()
 
-    progress = await message.answer(msg.ADMIN_VOLUME_LOADING)
+
+@admin_router.callback_query(F.data == "admin:invite")
+async def admin_create_invite(call: CallbackQuery) -> None:
     try:
-        report = await get_trading_report(str(uid), date_range)
-        await progress.edit_text(
-            msg.ADMIN_VOLUME_REPORT.format(
-                uid=uid,
-                start_date=date_range.start_label,
-                end_date=date_range.end_label,
-                spot_details=_format_market_rows(
-                    report.spot_by_symbol
-                ),
-                futures_details=_format_market_rows(
-                    report.futures_by_symbol
-                ),
-                futures_total=format_decimal(
-                    report.futures_total_usdt
-                ),
-                effective_volume=format_decimal(
-                    report.effective_volume_usdt
-                ),
-                commission=format_decimal(
-                    report.commission_usdt
-                ),
+        invite_link = await create_invite_link(call.bot)
+        await call.message.answer(
+            msg.ADMIN_INVITE_CREATED.format(
+                invite_link=invite_link,
             ),
             reply_markup=admin_back_keyboard(),
         )
     except Exception:
-        logger.exception("Admin trading volume report error")
-        await progress.edit_text(msg.ERROR_GENERIC)
+        logger.exception("Admin one-time invite creation error")
+        await call.message.answer(msg.ERROR_GENERIC)
     finally:
-        await state.clear()
+        await call.answer()
+
+
+@admin_router.callback_query(F.data == "admin:report")
+async def admin_full_report(call: CallbackQuery) -> None:
+    await call.answer()
+    progress = await call.message.answer(msg.ADMIN_REPORT_LOADING)
+    try:
+        reports = await get_standard_reports()
+
+        def values(prefix: str) -> dict[str, str]:
+            report = reports[prefix]
+            return {
+                f"{prefix}_spot": format_decimal(
+                    report.spot_total_usdt
+                ),
+                f"{prefix}_futures": format_decimal(
+                    report.futures_total_usdt
+                ),
+                f"{prefix}_total": format_decimal(
+                    report.effective_volume_usdt
+                ),
+                f"{prefix}_commission": format_decimal(
+                    report.commission_usdt
+                ),
+            }
+
+        report_values = {
+            **values("today"),
+            **values("week"),
+            **values("month"),
+        }
+        await progress.edit_text(
+            msg.ADMIN_REPORT.format(**report_values),
+            reply_markup=admin_back_keyboard(),
+        )
+    except Exception:
+        logger.exception("Admin full trading report error")
+        await progress.edit_text(msg.ERROR_GENERIC)
 
 
 @admin_router.callback_query(F.data == "admin:broadcast")

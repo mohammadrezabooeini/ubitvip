@@ -269,7 +269,7 @@ class YubitAPI:
 
     async def get_trading_volume(
         self,
-        uid: str,
+        uid: Optional[str],
         market_type: str,
         start_time: int,
         end_time: int,
@@ -282,14 +282,17 @@ class YubitAPI:
         if trade_type is None:
             raise ValueError("market_type must be spot or futures.")
 
+        params: Dict[str, Any] = {
+            "start_time": _format_api_time(start_time),
+            "end_time": _format_api_time(end_time),
+            "trade_type": trade_type,
+        }
+        if uid:
+            params["uid"] = str(uid)
+
         rows = await self._get_paged_rows(
             "/oapi/partner/affiliate/private/v1/transAmountList",
-            {
-                "uid": str(uid),
-                "start_time": _format_api_time(start_time),
-                "end_time": _format_api_time(end_time),
-                "trade_type": trade_type,
-            },
+            params,
         )
         normalized: List[Dict[str, Any]] = []
         for row in rows:
@@ -318,18 +321,21 @@ class YubitAPI:
 
     async def get_commission_report(
         self,
-        uid: str,
+        uid: Optional[str],
         start_time: int,
         end_time: int,
     ) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {
+            "start_time": _format_api_time(start_time),
+            "end_time": _format_api_time(end_time),
+        }
+        if uid:
+            params["uid"] = str(uid)
+
         data = await self._request(
             "GET",
             "/oapi/partner/affiliate/private/v1/totalCommission",
-            params={
-                "uid": str(uid),
-                "start_time": _format_api_time(start_time),
-                "end_time": _format_api_time(end_time),
-            },
+            params=params,
         )
         if not _is_success(data.get("code")):
             raise RuntimeError(

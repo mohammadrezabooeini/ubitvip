@@ -160,7 +160,7 @@ class CustomEmojiKeyboardTest(unittest.TestCase):
             for button in row
         ]
 
-        self.assertEqual(len(buttons), 9)
+        self.assertEqual(len(buttons), 11)
         self.assertTrue(
             all(button.icon_custom_emoji_id for button in buttons)
         )

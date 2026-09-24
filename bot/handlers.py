@@ -11,10 +11,9 @@ from aiogram.types import CallbackQuery, ChatMemberUpdated, Message
 from bot.admin_auth import is_admin
 from bot.keyboards import admin_menu, main_menu
 from config import (
-    BONUS_TEXT,
+    ADMIN_IDS,
     MIN_BALANCE,
     REGISTER_LINK,
-    SUPPORT_USERNAME,
     UID_MAX_LENGTH,
     UID_MIN_LENGTH,
     WARNING_LIMIT,
@@ -43,6 +42,10 @@ _user_locks: Dict[int, asyncio.Lock] = {}
 
 class JoinVIP(StatesGroup):
     waiting_uid = State()
+
+
+class Support(StatesGroup):
+    waiting_message = State()
 
 
 def _lock_for(telegram_id: int) -> asyncio.Lock:
@@ -344,30 +347,83 @@ async def account_status(call: CallbackQuery) -> None:
         await call.answer()
 
 
-@router.callback_query(F.data == "bonus")
-async def bonus(call: CallbackQuery) -> None:
+@router.callback_query(F.data == "campaign")
+async def campaign(call: CallbackQuery) -> None:
     try:
-        await call.message.answer(
-            msg.BONUS_MSG.format(bonus_text=BONUS_TEXT)
+        saved = await db.get_campaign()
+        if saved is None:
+            await call.message.answer(msg.CAMPAIGN_EMPTY)
+            return
+        await call.bot.copy_message(
+            chat_id=call.from_user.id,
+            from_chat_id=saved["source_chat_id"],
+            message_id=saved["source_message_id"],
         )
     except Exception:
-        logger.exception("Bonus handler error")
+        logger.exception("Campaign handler error")
         await call.message.answer(msg.ERROR_GENERIC)
     finally:
         await call.answer()
 
 
 @router.callback_query(F.data == "support")
-async def support(call: CallbackQuery) -> None:
+async def support(call: CallbackQuery, state: FSMContext) -> None:
     try:
-        await call.message.answer(
-            msg.SUPPORT_MSG.format(support_username=SUPPORT_USERNAME)
-        )
+        await state.set_state(Support.waiting_message)
+        await call.message.answer(msg.SUPPORT_PROMPT)
     except Exception:
         logger.exception("Support handler error")
         await call.message.answer(msg.ERROR_GENERIC)
     finally:
         await call.answer()
+
+
+@router.message(Support.waiting_message)
+async def receive_support_message(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    if message.from_user is None:
+        return
+
+    delivered = 0
+    username = (
+        f"@{message.from_user.username}"
+        if message.from_user.username
+        else "-"
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await message.bot.send_message(
+                admin_id,
+                msg.SUPPORT_ADMIN_HEADER.format(
+                    first_name=message.from_user.first_name or "-",
+                    username=username,
+                    telegram_id=message.from_user.id,
+                ),
+            )
+            copied = await message.bot.copy_message(
+                chat_id=admin_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+            )
+            await db.save_support_message(
+                admin_chat_id=admin_id,
+                admin_message_id=copied.message_id,
+                user_telegram_id=message.from_user.id,
+            )
+            delivered += 1
+        except Exception:
+            logger.exception(
+                "Support delivery failed for admin_id=%s",
+                admin_id,
+            )
+
+    if delivered:
+        await state.clear()
+        await message.answer(msg.SUPPORT_RECEIVED)
+    else:
+        await message.answer(msg.SUPPORT_DELIVERY_FAILED)
 
 
 @router.callback_query(F.data == "register")

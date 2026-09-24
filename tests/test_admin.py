@@ -86,6 +86,36 @@ class AdminDatabaseTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(all_vips), 1)
         self.assertEqual(all_vips[0]["telegram_id"], 2)
 
+    async def test_support_mapping_and_campaign_are_persisted(self):
+        await self.db.save_support_message(
+            admin_chat_id=100,
+            admin_message_id=200,
+            user_telegram_id=300,
+        )
+        self.assertEqual(
+            await self.db.get_support_user(100, 200),
+            300,
+        )
+        self.assertIsNone(
+            await self.db.get_support_user(100, 201)
+        )
+
+        await self.db.set_campaign(
+            source_chat_id=100,
+            source_message_id=500,
+        )
+        campaign = await self.db.get_campaign()
+        self.assertEqual(campaign["source_chat_id"], 100)
+        self.assertEqual(campaign["source_message_id"], 500)
+
+        await self.db.set_campaign(
+            source_chat_id=101,
+            source_message_id=501,
+        )
+        campaign = await self.db.get_campaign()
+        self.assertEqual(campaign["source_chat_id"], 101)
+        self.assertEqual(campaign["source_message_id"], 501)
+
     async def test_live_refresh_updates_without_enforcement(self):
         await self.db.register_user(
             telegram_id=10,

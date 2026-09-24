@@ -81,6 +81,23 @@ class YubitBalanceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(result["success"])
 
+    async def test_global_commission_query_omits_uid(self):
+        api = FakeYubitAPI(
+            {
+                "code": 0,
+                "data": {"totalCommission": "12.5"},
+            }
+        )
+
+        rows = await api.get_commission_report(
+            None,
+            1_790_000_000_000,
+            1_790_000_100_000,
+        )
+
+        self.assertEqual(rows[0]["commissionAmount"], "12.5")
+        self.assertNotIn("uid", api.request_args[2])
+
 
 if __name__ == "__main__":
     unittest.main()

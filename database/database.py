@@ -59,6 +59,27 @@ class Database:
                     )
                     """
                 )
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS support_messages(
+                        admin_chat_id    INTEGER NOT NULL,
+                        admin_message_id INTEGER NOT NULL,
+                        user_telegram_id INTEGER NOT NULL,
+                        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+                        PRIMARY KEY(admin_chat_id, admin_message_id)
+                    )
+                    """
+                )
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS campaign(
+                        id                INTEGER PRIMARY KEY CHECK(id=1),
+                        source_chat_id    INTEGER NOT NULL,
+                        source_message_id INTEGER NOT NULL,
+                        updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                    """
+                )
                 await conn.commit()
 
             logger.info("Database initialized successfully.")
@@ -518,6 +539,100 @@ class Database:
                 return await cursor.fetchall()
         except Exception:
             logger.exception("Get all VIP users error")
+            raise
+
+    async def save_support_message(
+        self,
+        admin_chat_id: int,
+        admin_message_id: int,
+        user_telegram_id: int,
+    ) -> None:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute(
+                    """
+                    INSERT OR REPLACE INTO support_messages(
+                        admin_chat_id,
+                        admin_message_id,
+                        user_telegram_id
+                    )
+                    VALUES(?, ?, ?)
+                    """,
+                    (
+                        admin_chat_id,
+                        admin_message_id,
+                        user_telegram_id,
+                    ),
+                )
+                await conn.commit()
+        except Exception:
+            logger.exception("Save support message error")
+            raise
+
+    async def get_support_user(
+        self,
+        admin_chat_id: int,
+        admin_message_id: int,
+    ) -> Optional[int]:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT user_telegram_id
+                    FROM support_messages
+                    WHERE admin_chat_id=?
+                      AND admin_message_id=?
+                    """,
+                    (admin_chat_id, admin_message_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    return None
+                return int(row["user_telegram_id"])
+        except Exception:
+            logger.exception("Get support user error")
+            raise
+
+    async def set_campaign(
+        self,
+        source_chat_id: int,
+        source_message_id: int,
+    ) -> None:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                await conn.execute(
+                    """
+                    INSERT INTO campaign(
+                        id,
+                        source_chat_id,
+                        source_message_id
+                    )
+                    VALUES(1, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        source_chat_id=excluded.source_chat_id,
+                        source_message_id=excluded.source_message_id,
+                        updated_at=datetime('now')
+                    """,
+                    (source_chat_id, source_message_id),
+                )
+                await conn.commit()
+        except Exception:
+            logger.exception("Set campaign error")
+            raise
+
+    async def get_campaign(self) -> Optional[UserRow]:
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    "SELECT * FROM campaign WHERE id=1"
+                )
+                return await cursor.fetchone()
+        except Exception:
+            logger.exception("Get campaign error")
             raise
 
 

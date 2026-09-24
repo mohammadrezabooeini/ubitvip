@@ -163,19 +163,9 @@ INVITE_EXPIRE_SECONDS: int = CHECK_INTERVAL_DAYS * 24 * 60 * 60
 # External Links & Support
 # ──────────────────────────────
 
-SUPPORT_USERNAME: str = os.getenv(
-    "SUPPORT_USERNAME",
-    "SupportUsername",
-)
-
 REGISTER_LINK: str = os.getenv(
     "REGISTER_LINK",
     "https://www.yubit.com/",
-)
-
-BONUS_TEXT: str = os.getenv(
-    "BONUS_TEXT",
-    "🎁 متن مربوط به بونس اینجا قرار می‌گیرد.",
 )
 
 # ──────────────────────────────
