@@ -128,10 +128,7 @@ if YUBIT_RECV_WINDOW > 60000:
 # VIP Settings
 # ──────────────────────────────
 
-MIN_BALANCE: int = _env_int("MIN_BALANCE", 50)
 WARNING_RANGE: int = _env_int("WARNING_RANGE", 15)
-
-WARNING_LIMIT: int = MIN_BALANCE + WARNING_RANGE
 
 # ──────────────────────────────
 # UID Validation

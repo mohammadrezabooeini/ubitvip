@@ -23,27 +23,40 @@ def _button(
     )
 
 
-def main_menu() -> InlineKeyboardMarkup:
+def main_menu(trial_enabled: bool = False) -> InlineKeyboardMarkup:
     """ساخت منوی اصلی ربات."""
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+    rows = [
+        [
+            _button(
+                text="عضویت",
+                emoji="⭐",
+                callback_data="join_vip",
+                style="success",
+            )
+        ],
+        [
+            _button(
+                text="وضعیت حساب",
+                emoji="👤",
+                callback_data="status",
+                style="success",
+            )
+        ],
+    ]
+    if trial_enabled:
+        rows.append(
             [
                 _button(
-                    text="عضویت",
-                    emoji="⭐",
-                    callback_data="join_vip",
+                    text="VIP آزمایشی ۱ ساعته",
+                    emoji="🎁",
+                    callback_data="trial_vip",
                     style="success",
                 )
-            ],
-            [
-                _button(
-                    text="وضعیت حساب",
-                    emoji="👤",
-                    callback_data="status",
-                    style="success",
-                )
-            ],
+            ]
+        )
+    rows.extend(
+        [
             [
                 _button(
                     text="کمپین",
@@ -65,6 +78,9 @@ def main_menu() -> InlineKeyboardMarkup:
                 )
             ],
         ]
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=rows
     )
 
 
@@ -117,6 +133,18 @@ def admin_menu() -> InlineKeyboardMarkup:
                     text="لینک یکبار مصرف",
                     emoji="🔗",
                     callback_data="admin:invite",
+                ),
+            ],
+            [
+                _button(
+                    text="VIP تستی",
+                    emoji="🎁",
+                    callback_data="admin:trial",
+                ),
+                _button(
+                    text="تنظیم حداقل ورودی",
+                    emoji="💰",
+                    callback_data="admin:minimum",
                 ),
             ],
             [

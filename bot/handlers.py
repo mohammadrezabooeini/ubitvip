@@ -12,11 +12,10 @@ from bot.admin_auth import is_admin
 from bot.keyboards import admin_menu, main_menu
 from config import (
     ADMIN_IDS,
-    MIN_BALANCE,
     REGISTER_LINK,
     UID_MAX_LENGTH,
     UID_MIN_LENGTH,
-    WARNING_LIMIT,
+    WARNING_RANGE,
     logger,
 )
 from constants import messages as msg
@@ -67,10 +66,14 @@ async def _send_success(
     uid: str,
     balance: float,
     invite_link: str,
+    minimum_balance: float,
 ) -> None:
     warning_text = ""
-    if is_warning_balance(balance, MIN_BALANCE, WARNING_LIMIT):
-        warning_text = msg.WARNING_TEXT.format(min_balance=MIN_BALANCE)
+    warning_limit = minimum_balance + WARNING_RANGE
+    if is_warning_balance(balance, minimum_balance, warning_limit):
+        warning_text = msg.WARNING_TEXT.format(
+            min_balance=minimum_balance
+        )
 
     text = ensure_rtl(
         msg.REGISTRATION_SUCCESS.format(
@@ -100,13 +103,18 @@ async def start(message: Message, state: FSMContext) -> None:
         admin = is_admin(
             message.from_user.id if message.from_user else None
         )
+        trial_state = await db.get_trial_state()
         await message.answer(
             (
                 msg.ADMIN_WELCOME
                 if admin
                 else msg.WELCOME.format(first_name=_first_name(message))
             ),
-            reply_markup=admin_menu() if admin else main_menu(),
+            reply_markup=(
+                admin_menu()
+                if admin
+                else main_menu(trial_enabled=trial_state["enabled"])
+            ),
         )
     except Exception:
         logger.exception("Start handler error")
@@ -146,6 +154,7 @@ async def revoke_used_invite(event: ChatMemberUpdated) -> None:
     )
     if revoked:
         await db.update_invite_link(new_member.user.id, None)
+        await db.clear_trial_invite_link(new_member.user.id)
 
 
 @router.callback_query(F.data == "join_vip")
@@ -175,10 +184,11 @@ async def join_vip(call: CallbackQuery, state: FSMContext) -> None:
             return
 
         await state.set_state(JoinVIP.waiting_uid)
+        minimum_balance = await db.get_minimum_balance()
         await call.message.answer(
             msg.ASK_UID.format(
                 register_link=REGISTER_LINK,
-                min_balance=MIN_BALANCE,
+                min_balance=minimum_balance,
             )
         )
 
@@ -220,8 +230,10 @@ async def _register_uid(
 ) -> None:
     telegram_id = message.from_user.id
     invite_link = None
+    active_trial = None
 
     try:
+        active_trial = await db.get_active_trial(telegram_id)
         is_active = await db.is_user_active(telegram_id)
         if is_active:
             await message.answer(msg.ALREADY_VIP)
@@ -253,11 +265,12 @@ async def _register_uid(
         return
 
     balance: float = result["balance"]
+    minimum_balance = await db.get_minimum_balance()
 
-    if is_insufficient_balance(balance, MIN_BALANCE):
+    if is_insufficient_balance(balance, minimum_balance):
         await message.answer(
             msg.INSUFFICIENT_BALANCE.format(
-                min_balance=MIN_BALANCE,
+                min_balance=minimum_balance,
                 balance=balance,
             )
         )
@@ -300,6 +313,12 @@ async def _register_uid(
         await state.clear()
         return
 
+    if active_trial is not None and active_trial["invite_link"]:
+        await revoke_invite_link(
+            message.bot,
+            active_trial["invite_link"],
+        )
+
     logger.info(
         "User registered: telegram_id=%s uid=%s balance=%s status=%s",
         telegram_id,
@@ -308,8 +327,80 @@ async def _register_uid(
         status,
     )
 
-    await _send_success(message, uid, balance, invite_link)
+    await _send_success(
+        message,
+        uid,
+        balance,
+        invite_link,
+        minimum_balance,
+    )
     await state.clear()
+
+
+@router.callback_query(F.data == "trial_vip")
+async def trial_vip(call: CallbackQuery) -> None:
+    invite_link = None
+    registered = False
+    try:
+        telegram_id = call.from_user.id
+        async with _lock_for(telegram_id):
+            trial_state = await db.get_trial_state()
+            if not trial_state["enabled"]:
+                await call.message.answer(msg.TRIAL_INACTIVE)
+                return
+
+            if await db.is_user_active(telegram_id):
+                await call.message.answer(msg.TRIAL_PAID_VIP)
+                return
+
+            active = await db.get_active_trial(telegram_id)
+            if active is not None:
+                invite_text = ""
+                if active["invite_link"]:
+                    invite_text = (
+                        "\n\n🔗 لینک ورود:\n"
+                        f"{active['invite_link']}"
+                    )
+                await call.message.answer(
+                    msg.TRIAL_ALREADY_ACTIVE.format(
+                        invite_text=invite_text
+                    )
+                )
+                return
+
+            invite_link = await create_invite_link(
+                call.bot,
+                expire_seconds=60 * 60,
+            )
+            result = await db.register_trial(
+                telegram_id=telegram_id,
+                invite_link=invite_link,
+            )
+            if result != "created":
+                await revoke_invite_link(call.bot, invite_link)
+                if result == "disabled":
+                    await call.message.answer(msg.TRIAL_INACTIVE)
+                elif result == "active":
+                    await call.message.answer(
+                        msg.TRIAL_ALREADY_ACTIVE.format(
+                            invite_text=""
+                        )
+                    )
+                else:
+                    await call.message.answer(msg.TRIAL_ALREADY_USED)
+                return
+
+            registered = True
+            await call.message.answer(
+                msg.TRIAL_SUCCESS.format(invite_link=invite_link)
+            )
+    except Exception:
+        logger.exception("Trial VIP handler error")
+        if invite_link and not registered:
+            await revoke_invite_link(call.bot, invite_link)
+        await call.message.answer(msg.ERROR_GENERIC)
+    finally:
+        await call.answer()
 
 
 @router.callback_query(F.data == "status")
@@ -317,6 +408,12 @@ async def account_status(call: CallbackQuery) -> None:
     try:
         user = await db.get_user(call.from_user.id)
         if user is None:
+            trial = await db.get_active_trial(call.from_user.id)
+            if trial is not None:
+                await call.message.answer(
+                    msg.TRIAL_ALREADY_ACTIVE.format(invite_text="")
+                )
+                return
             await call.message.answer(msg.NOT_VIP)
             return
 

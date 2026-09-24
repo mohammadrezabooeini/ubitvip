@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, List
 
 from aiogram import F, Router
@@ -15,7 +16,7 @@ from bot.keyboards import (
     main_menu,
     remove_confirmation_keyboard,
 )
-from config import MIN_BALANCE, logger
+from config import logger
 from constants import messages as msg
 from database.database import db
 from services.channel import (
@@ -45,6 +46,7 @@ class AdminStates(StatesGroup):
     waiting_remove = State()
     confirm_remove = State()
     waiting_campaign = State()
+    waiting_minimum = State()
 
 
 class SupportReplyFilter(BaseFilter):
@@ -137,9 +139,12 @@ async def admin_back(call: CallbackQuery, state: FSMContext) -> None:
 @admin_router.callback_query(F.data == "admin:user_menu")
 async def show_user_menu(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+    trial_state = await db.get_trial_state()
     await call.message.answer(
         msg.WELCOME.format(first_name=call.from_user.first_name),
-        reply_markup=main_menu(),
+        reply_markup=main_menu(
+            trial_enabled=trial_state["enabled"]
+        ),
     )
     await call.answer()
 
@@ -176,7 +181,8 @@ async def admin_refresh(call: CallbackQuery) -> None:
     progress = await call.message.answer(msg.ADMIN_REFRESH_STARTED)
 
     try:
-        result = await refresh_all_vip_balances(MIN_BALANCE)
+        minimum_balance = await db.get_minimum_balance()
+        result = await refresh_all_vip_balances(minimum_balance)
         await progress.edit_text(
             msg.ADMIN_REFRESH_SUMMARY.format(
                 checked=result.checked,
@@ -350,10 +356,11 @@ async def admin_add_user(
             return
 
         balance = float(validation["balance"])
-        if is_insufficient_balance(balance, MIN_BALANCE):
+        minimum_balance = await db.get_minimum_balance()
+        if is_insufficient_balance(balance, minimum_balance):
             await message.answer(
                 msg.INSUFFICIENT_BALANCE.format(
-                    min_balance=MIN_BALANCE,
+                    min_balance=minimum_balance,
                     balance=balance,
                 )
             )
@@ -611,6 +618,70 @@ async def admin_create_invite(call: CallbackQuery) -> None:
         await call.message.answer(msg.ERROR_GENERIC)
     finally:
         await call.answer()
+
+
+@admin_router.callback_query(F.data == "admin:trial")
+async def admin_toggle_trial(call: CallbackQuery) -> None:
+    try:
+        state = await db.toggle_trial()
+        status = "فعال ✅" if state["enabled"] else "غیرفعال ❌"
+        await call.message.answer(
+            msg.ADMIN_TRIAL_STATUS.format(status=status),
+            reply_markup=admin_back_keyboard(),
+        )
+    except Exception:
+        logger.exception("Admin trial toggle error")
+        await call.message.answer(msg.ERROR_GENERIC)
+    finally:
+        await call.answer()
+
+
+@admin_router.callback_query(F.data == "admin:minimum")
+async def admin_minimum_start(
+    call: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    try:
+        current = await db.get_minimum_balance()
+        await state.set_state(AdminStates.waiting_minimum)
+        await call.message.answer(
+            msg.ADMIN_MINIMUM_PROMPT.format(
+                current=format_decimal(Decimal(str(current)))
+            ),
+            reply_markup=admin_back_keyboard(),
+        )
+    except Exception:
+        logger.exception("Admin minimum setting start error")
+        await call.message.answer(msg.ERROR_GENERIC)
+    finally:
+        await call.answer()
+
+
+@admin_router.message(AdminStates.waiting_minimum)
+async def admin_minimum_save(
+    message: Message,
+    state: FSMContext,
+) -> None:
+    try:
+        value = Decimal((message.text or "").strip())
+        if not value.is_finite() or value < 0:
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        await message.answer(msg.ADMIN_MINIMUM_INVALID)
+        return
+
+    try:
+        await db.set_minimum_balance(float(value))
+        await message.answer(
+            msg.ADMIN_MINIMUM_SAVED.format(
+                value=format_decimal(value)
+            ),
+            reply_markup=admin_menu(),
+        )
+        await state.clear()
+    except Exception:
+        logger.exception("Admin minimum setting save error")
+        await message.answer(msg.ERROR_GENERIC)
 
 
 @admin_router.callback_query(F.data == "admin:report")

@@ -116,6 +116,60 @@ class AdminDatabaseTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(campaign["source_chat_id"], 101)
         self.assertEqual(campaign["source_message_id"], 501)
 
+    async def test_minimum_balance_and_trial_generations(self):
+        self.assertEqual(
+            await self.db.get_minimum_balance(),
+            50.0,
+        )
+        await self.db.set_minimum_balance(75.5)
+        self.assertEqual(
+            await self.db.get_minimum_balance(),
+            75.5,
+        )
+
+        initial = await self.db.get_trial_state()
+        self.assertFalse(initial["enabled"])
+        self.assertEqual(
+            await self.db.register_trial(10, "disabled-link"),
+            "disabled",
+        )
+
+        enabled = await self.db.toggle_trial()
+        self.assertTrue(enabled["enabled"])
+        self.assertEqual(enabled["generation"], 1)
+        self.assertEqual(
+            await self.db.register_trial(10, "trial-link-1"),
+            "created",
+        )
+        self.assertEqual(
+            await self.db.register_trial(10, "duplicate-link"),
+            "active",
+        )
+
+        await self.db.mark_trial_expired(10, 1)
+        self.assertEqual(
+            await self.db.register_trial(10, "same-period-link"),
+            "already_used",
+        )
+
+        disabled = await self.db.toggle_trial()
+        self.assertFalse(disabled["enabled"])
+        enabled_again = await self.db.toggle_trial()
+        self.assertEqual(enabled_again["generation"], 2)
+        self.assertEqual(
+            await self.db.register_trial(10, "trial-link-2"),
+            "created",
+        )
+        await self.db.register_user(
+            telegram_id=10,
+            username=None,
+            first_name="Upgraded",
+            yubit_uid="10101010",
+            balance=100,
+            invite_link="paid-link",
+        )
+        self.assertIsNone(await self.db.get_active_trial(10))
+
     async def test_live_refresh_updates_without_enforcement(self):
         await self.db.register_user(
             telegram_id=10,

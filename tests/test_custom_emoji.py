@@ -153,6 +153,17 @@ class CustomEmojiKeyboardTest(unittest.TestCase):
             )
         )
 
+        trial_buttons = [
+            button
+            for row in main_menu(trial_enabled=True).inline_keyboard
+            for button in row
+        ]
+        self.assertEqual(len(trial_buttons), 6)
+        self.assertEqual(
+            trial_buttons[2].callback_data,
+            "trial_vip",
+        )
+
     def test_admin_keyboard_uses_custom_icons(self):
         buttons = [
             button
@@ -160,7 +171,7 @@ class CustomEmojiKeyboardTest(unittest.TestCase):
             for button in row
         ]
 
-        self.assertEqual(len(buttons), 11)
+        self.assertEqual(len(buttons), 13)
         self.assertTrue(
             all(button.icon_custom_emoji_id for button in buttons)
         )
