@@ -134,12 +134,12 @@ class CustomEmojiKeyboardTest(unittest.TestCase):
             [len(row) for row in keyboard.inline_keyboard],
             [1, 1, 2, 1],
         )
-        self.assertEqual(buttons[0].text, "عضویت رایگان")
+        self.assertEqual(buttons[0].text, "عضویت رایگان VIP")
         self.assertEqual(buttons[0].style, "success")
         self.assertEqual(buttons[1].style, "success")
-        self.assertIsNone(buttons[2].style)
-        self.assertIsNone(buttons[3].style)
-        self.assertEqual(buttons[4].style, "success")
+        self.assertEqual(buttons[2].style, "primary")
+        self.assertEqual(buttons[3].style, "primary")
+        self.assertEqual(buttons[4].style, "danger")
         self.assertIsNotNone(buttons[4].url)
         self.assertIsNone(buttons[4].callback_data)
         self.assertTrue(
