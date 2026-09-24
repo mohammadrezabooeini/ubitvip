@@ -5,7 +5,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import aiohttp
 
@@ -34,6 +34,11 @@ def encode_json_body(payload: Dict[str, Any]) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def encode_query(params: Dict[str, Any]) -> str:
+    """Encode exactly as Yubit's signed URL examples (%20, not +)."""
+    return urlencode(params, quote_via=quote)
 
 
 def _is_success(code: Any) -> bool:
@@ -102,7 +107,7 @@ class YubitAPI:
         body: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         method = method.upper()
-        query = urlencode(params or {})
+        query = encode_query(params or {})
         payload = query if method == "GET" else encode_json_body(body or {})
         timestamp = str(int(time.time() * 1000))
         signature = self._generate_signature(

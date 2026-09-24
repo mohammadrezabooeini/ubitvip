@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import unittest
 
-from services.yubit_api import YubitAPI
+from services.yubit_api import YubitAPI, encode_query
 
 
 class FakeYubitAPI(YubitAPI):
@@ -17,6 +17,17 @@ class FakeYubitAPI(YubitAPI):
 
 
 class YubitSignatureTest(unittest.TestCase):
+    def test_query_spaces_use_percent_encoding(self):
+        self.assertEqual(
+            encode_query(
+                {
+                    "uid": "123",
+                    "start_time": "2026-09-24 00:00:00",
+                }
+            ),
+            "uid=123&start_time=2026-09-24%2000%3A00%3A00",
+        )
+
     def test_v2_signature_uses_documented_field_order(self):
         api = YubitAPI()
         api.api_key = "key"
