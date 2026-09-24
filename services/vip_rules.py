@@ -9,15 +9,6 @@ def is_insufficient_balance(balance: float, min_balance: float) -> bool:
     return balance < min_balance
 
 
-def is_warning_balance(
-    balance: float,
-    min_balance: float,
-    warning_limit: float,
-) -> bool:
-    """Warn when balance is still valid but inside the warning range."""
-    return min_balance <= balance <= warning_limit
-
-
 def should_remove_after_warnings(warning_count: int) -> bool:
     """Remove on the next failed check after three delivered warnings."""
     return warning_count >= MAX_BALANCE_WARNINGS

@@ -91,16 +91,8 @@ REGISTRATION_SUCCESS: str = (
     "💰 موجودی\n"
     "{balance} USDT\n"
     "━━━━━━━━━━━━━━\n\n"
-    "{warning_text}"
     "🔗 لینک ورود VIP\n"
     "{invite_link}"
-)
-
-WARNING_TEXT: str = (
-    "⚠️ توجه:\n\n"
-    "موجودی شما در محدوده هشدار قرار دارد.\n\n"
-    "اگر موجودی شما به زیر {min_balance} USDT برسد، "
-    "دسترسی VIP شما حذف خواهد شد.\n\n"
 )
 
 # ──────────────────────────────

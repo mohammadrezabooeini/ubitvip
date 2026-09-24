@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 
 from services.vip_rules import (
     is_insufficient_balance,
-    is_warning_balance,
     needs_recheck,
     should_remove_after_warnings,
 )
@@ -14,12 +13,6 @@ class VipRulesTest(unittest.TestCase):
         self.assertFalse(is_insufficient_balance(50, 50))
         self.assertTrue(is_insufficient_balance(49.99, 50))
         self.assertFalse(is_insufficient_balance(50.01, 50))
-
-    def test_warning_zone(self) -> None:
-        self.assertTrue(is_warning_balance(50, 50, 65))
-        self.assertTrue(is_warning_balance(65, 50, 65))
-        self.assertFalse(is_warning_balance(49.9, 50, 65))
-        self.assertFalse(is_warning_balance(65.1, 50, 65))
 
     def test_removal_happens_after_three_warnings(self) -> None:
         self.assertFalse(should_remove_after_warnings(0))

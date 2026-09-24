@@ -15,7 +15,6 @@ from config import (
     REGISTER_LINK,
     UID_MAX_LENGTH,
     UID_MIN_LENGTH,
-    WARNING_RANGE,
     logger,
 )
 from constants import messages as msg
@@ -31,7 +30,7 @@ from services.custom_emoji import (
     ensure_rtl,
 )
 from services.yubit_api import validate_uid, yubit
-from services.vip_rules import is_insufficient_balance, is_warning_balance
+from services.vip_rules import is_insufficient_balance
 
 router = Router()
 _user_locks: Dict[int, asyncio.Lock] = {}
@@ -64,20 +63,11 @@ async def _send_success(
     uid: str,
     balance: float,
     invite_link: str,
-    minimum_balance: float,
 ) -> None:
-    warning_text = ""
-    warning_limit = minimum_balance + WARNING_RANGE
-    if is_warning_balance(balance, minimum_balance, warning_limit):
-        warning_text = msg.WARNING_TEXT.format(
-            min_balance=minimum_balance
-        )
-
     text = ensure_rtl(
         msg.REGISTRATION_SUCCESS.format(
             uid=uid,
             balance=balance,
-            warning_text=warning_text,
             invite_link=invite_link,
         )
     )
@@ -326,7 +316,6 @@ async def _register_uid(
         uid,
         balance,
         invite_link,
-        minimum_balance,
     )
     await state.clear()
 

@@ -125,12 +125,6 @@ if YUBIT_RECV_WINDOW > 60000:
     raise SystemExit(1)
 
 # ──────────────────────────────
-# VIP Settings
-# ──────────────────────────────
-
-WARNING_RANGE: int = _env_int("WARNING_RANGE", 15)
-
-# ──────────────────────────────
 # UID Validation
 # ──────────────────────────────
 
