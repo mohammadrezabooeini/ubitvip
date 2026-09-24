@@ -134,7 +134,7 @@ class CustomEmojiKeyboardTest(unittest.TestCase):
             [len(row) for row in keyboard.inline_keyboard],
             [1, 1, 2, 1],
         )
-        self.assertEqual(buttons[0].text, "عضویت")
+        self.assertEqual(buttons[0].text, "عضویت رایگان")
         self.assertEqual(buttons[0].style, "success")
         self.assertEqual(buttons[1].style, "success")
         self.assertIsNone(buttons[2].style)

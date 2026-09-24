@@ -29,7 +29,7 @@ def main_menu(trial_enabled: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [
             _button(
-                text="عضویت",
+                text="عضویت رایگان",
                 emoji="⭐",
                 callback_data="join_vip",
                 style="success",
@@ -59,12 +59,12 @@ def main_menu(trial_enabled: bool = False) -> InlineKeyboardMarkup:
         [
             [
                 _button(
-                    text="کمپین",
+                    text="بونوس",
                     emoji="🎁",
                     callback_data="campaign",
                 ),
                 _button(
-                    text="پشتیبانی",
+                    text="ارتباط با پشتیبانی",
                     emoji="☎️",
                     callback_data="support",
                 ),
