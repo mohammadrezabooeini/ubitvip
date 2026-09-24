@@ -7,7 +7,11 @@ from openpyxl import load_workbook
 
 from bot.admin_auth import is_admin
 from database.database import Database
-from services.admin import broadcast_copy, refresh_all_vip_balances
+from services.admin import (
+    broadcast_copy,
+    broadcast_text,
+    refresh_all_vip_balances,
+)
 from services.excel_export import VIP_EXPORT_HEADERS, build_vip_excel
 
 
@@ -33,6 +37,12 @@ class FakeBot:
         if chat_id == self.failing_user:
             raise RuntimeError("delivery failed")
         self.sent.append((chat_id, from_chat_id, message_id))
+        return True
+
+    async def send_message(self, chat_id, text):
+        if chat_id == self.failing_user:
+            raise RuntimeError("delivery failed")
+        self.sent.append((chat_id, text))
         return True
 
 
@@ -170,6 +180,29 @@ class AdminDatabaseTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(await self.db.get_active_trial(10))
 
+    async def test_non_vip_recipients_exclude_paid_and_trial_users(self):
+        for telegram_id in (1, 2, 3):
+            await self.db.track_bot_user(
+                telegram_id,
+                None,
+                f"User {telegram_id}",
+            )
+        await self.db.register_user(
+            telegram_id=2,
+            username=None,
+            first_name="Paid",
+            yubit_uid="20202020",
+            balance=100,
+            invite_link="paid-link",
+        )
+        await self.db.toggle_trial()
+        await self.db.register_trial(3, "trial-link")
+
+        self.assertEqual(
+            await self.db.get_non_vip_user_ids(),
+            [1],
+        )
+
     async def test_live_refresh_updates_without_enforcement(self):
         await self.db.register_user(
             telegram_id=10,
@@ -226,6 +259,22 @@ class AdminBroadcastTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             bot.sent,
             [(1, 99, 7), (3, 99, 7)],
+        )
+
+    async def test_text_broadcast_isolates_delivery_failures(self):
+        bot = FakeBot(failing_user=2)
+        result = await broadcast_text(
+            bot=bot,
+            user_ids=[1, 2, 3],
+            text="Reminder",
+        )
+
+        self.assertEqual(result.total, 3)
+        self.assertEqual(result.sent, 2)
+        self.assertEqual(result.failed, 1)
+        self.assertEqual(
+            bot.sent,
+            [(1, "Reminder"), (3, "Reminder")],
         )
 
 

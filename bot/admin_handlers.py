@@ -16,7 +16,7 @@ from bot.keyboards import (
     main_menu,
     remove_confirmation_keyboard,
 )
-from config import logger
+from config import ADMIN_IDS, logger
 from constants import messages as msg
 from database.database import db
 from services.channel import (
@@ -24,7 +24,11 @@ from services.channel import (
     remove_user,
     revoke_invite_link,
 )
-from services.admin import broadcast_copy, refresh_all_vip_balances
+from services.admin import (
+    broadcast_copy,
+    broadcast_text,
+    refresh_all_vip_balances,
+)
 from services.excel_export import build_vip_excel
 from services.yubit_api import validate_uid, yubit
 from services.trading_report import (
@@ -733,6 +737,37 @@ async def admin_broadcast_start(
         reply_markup=admin_back_keyboard(),
     )
     await call.answer()
+
+
+@admin_router.callback_query(F.data == "admin:vip_reminder")
+async def admin_vip_reminder(
+    call: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    await call.answer()
+    await state.clear()
+    progress = await call.message.answer(msg.ADMIN_REMINDER_STARTED)
+    try:
+        recipients = [
+            telegram_id
+            for telegram_id in await db.get_non_vip_user_ids()
+            if telegram_id not in ADMIN_IDS
+        ]
+        result = await broadcast_text(
+            call.bot,
+            recipients,
+            msg.VIP_REMINDER,
+        )
+        await progress.edit_text(
+            msg.ADMIN_REMINDER_RESULT.format(
+                total=result.total,
+                sent=result.sent,
+                failed=result.failed,
+            )
+        )
+    except Exception:
+        logger.exception("Admin VIP reminder error")
+        await progress.edit_text(msg.ERROR_GENERIC)
 
 
 @admin_router.message(AdminStates.waiting_broadcast)

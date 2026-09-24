@@ -111,3 +111,29 @@ async def broadcast_copy(
             result.failed += 1
 
     return result
+
+
+async def broadcast_text(
+    bot: Bot,
+    user_ids: Iterable[int],
+    text: str,
+) -> BroadcastResult:
+    recipients = list(dict.fromkeys(user_ids))
+    result = BroadcastResult(total=len(recipients))
+
+    for telegram_id in recipients:
+        try:
+            await with_telegram_retry(
+                lambda telegram_id=telegram_id: bot.send_message(
+                    chat_id=telegram_id,
+                    text=text,
+                ),
+                attempts=3,
+            )
+            result.sent += 1
+        except (TelegramBadRequest, TelegramForbiddenError):
+            result.failed += 1
+        except Exception:
+            result.failed += 1
+
+    return result

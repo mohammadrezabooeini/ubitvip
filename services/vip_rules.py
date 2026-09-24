@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+MAX_BALANCE_WARNINGS = 3
+
 
 def is_insufficient_balance(balance: float, min_balance: float) -> bool:
     """User cannot join or stay if balance is below the minimum."""
@@ -14,6 +16,11 @@ def is_warning_balance(
 ) -> bool:
     """Warn when balance is still valid but inside the warning range."""
     return min_balance <= balance <= warning_limit
+
+
+def should_remove_after_warnings(warning_count: int) -> bool:
+    """Remove on the next failed check after three delivered warnings."""
+    return warning_count >= MAX_BALANCE_WARNINGS
 
 
 def needs_recheck(

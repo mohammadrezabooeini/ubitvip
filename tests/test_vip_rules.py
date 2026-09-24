@@ -5,6 +5,7 @@ from services.vip_rules import (
     is_insufficient_balance,
     is_warning_balance,
     needs_recheck,
+    should_remove_after_warnings,
 )
 
 
@@ -19,6 +20,11 @@ class VipRulesTest(unittest.TestCase):
         self.assertTrue(is_warning_balance(65, 50, 65))
         self.assertFalse(is_warning_balance(49.9, 50, 65))
         self.assertFalse(is_warning_balance(65.1, 50, 65))
+
+    def test_removal_happens_after_three_warnings(self) -> None:
+        self.assertFalse(should_remove_after_warnings(0))
+        self.assertFalse(should_remove_after_warnings(2))
+        self.assertTrue(should_remove_after_warnings(3))
 
     def test_needs_recheck_when_never_checked(self) -> None:
         self.assertTrue(needs_recheck(None, 7))

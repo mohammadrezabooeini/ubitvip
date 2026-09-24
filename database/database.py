@@ -569,6 +569,35 @@ class Database:
             logger.exception("Get broadcast recipients error")
             raise
 
+    async def get_non_vip_user_ids(self) -> List[int]:
+        """Users who started the bot and have no paid or active trial VIP."""
+        try:
+            async with self._connect() as conn:
+                await self._prepare(conn)
+                cursor = await conn.execute(
+                    """
+                    SELECT bot_users.telegram_id
+                    FROM bot_users
+                    LEFT JOIN users
+                      ON users.telegram_id=bot_users.telegram_id
+                     AND users.vip_status='active'
+                    WHERE users.telegram_id IS NULL
+                      AND NOT EXISTS(
+                          SELECT 1
+                          FROM vip_trials
+                          WHERE vip_trials.telegram_id=bot_users.telegram_id
+                            AND vip_trials.status='active'
+                            AND vip_trials.expires_at > datetime('now')
+                      )
+                    ORDER BY bot_users.telegram_id
+                    """
+                )
+                rows = await cursor.fetchall()
+                return [int(row["telegram_id"]) for row in rows]
+        except Exception:
+            logger.exception("Get non-VIP reminder recipients error")
+            raise
+
     async def get_all_vip_users(self) -> List[UserRow]:
         """Return active and inactive VIP records for admin export."""
         try:

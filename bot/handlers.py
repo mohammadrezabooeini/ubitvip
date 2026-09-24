@@ -26,11 +26,9 @@ from services.channel import (
     revoke_invite_link,
 )
 from services.custom_emoji import (
-    START_CUSTOM_EMOJI_FALLBACK,
     build_bold_entity,
     build_custom_emoji_entities,
     ensure_rtl,
-    start_custom_emoji_entity,
 )
 from services.yubit_api import validate_uid, yubit
 from services.vip_rules import is_insufficient_balance, is_warning_balance
@@ -96,10 +94,6 @@ async def _send_success(
 async def start(message: Message, state: FSMContext) -> None:
     await state.clear()
     try:
-        await message.answer(
-            START_CUSTOM_EMOJI_FALLBACK,
-            entities=[start_custom_emoji_entity()],
-        )
         admin = is_admin(
             message.from_user.id if message.from_user else None
         )

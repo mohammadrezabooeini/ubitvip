@@ -10,7 +10,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import (
     CHECK_INTERVAL_DAYS,
-    WARNING_RANGE,
     logger,
 )
 from constants import messages as msg
@@ -19,9 +18,10 @@ from services.channel import remove_user, revoke_invite_link
 from services.yubit_api import yubit
 from services.telegram_retry import with_telegram_retry
 from services.vip_rules import (
+    MAX_BALANCE_WARNINGS,
     is_insufficient_balance,
-    is_warning_balance,
     needs_recheck,
+    should_remove_after_warnings,
 )
 
 scheduler = AsyncIOScheduler()
@@ -70,8 +70,6 @@ async def weekly_check(bot: Bot) -> None:
     except Exception:
         logger.exception("Failed to fetch minimum balance setting")
         return
-    warning_limit = minimum_balance + WARNING_RANGE
-
     total = len(users)
     processed = 0
     warned = 0
@@ -101,6 +99,31 @@ async def weekly_check(bot: Bot) -> None:
             processed += 1
 
             if is_insufficient_balance(balance, minimum_balance):
+                warning_count = int(user["warning_count"] or 0)
+                if not should_remove_after_warnings(warning_count):
+                    next_warning = warning_count + 1
+                    await db.add_warning(telegram_id)
+                    warned += 1
+                    logger.warning(
+                        "Low-balance warning %s/%s: "
+                        "telegram_id=%s balance=%s minimum=%s",
+                        next_warning,
+                        MAX_BALANCE_WARNINGS,
+                        telegram_id,
+                        balance,
+                        minimum_balance,
+                    )
+                    await _safe_send(
+                        bot,
+                        telegram_id,
+                        msg.WARNING_MSG.format(
+                            warning_count=next_warning,
+                            balance=balance,
+                            min_balance=minimum_balance,
+                        ),
+                    )
+                    continue
+
                 invite_link = user["invite_link"]
                 if invite_link:
                     revoked = await revoke_invite_link(bot, invite_link)
@@ -138,36 +161,6 @@ async def weekly_check(bot: Bot) -> None:
                     ),
                 )
                 continue
-
-            if is_warning_balance(
-                balance,
-                minimum_balance,
-                warning_limit,
-            ):
-                await db.add_warning(telegram_id)
-                warned += 1
-                logger.warning(
-                    "Warning sent: telegram_id=%s balance=%s limit=%s",
-                    telegram_id,
-                    balance,
-                    warning_limit,
-                )
-                await _safe_send(
-                    bot,
-                    telegram_id,
-                    msg.WARNING_MSG.format(
-                        balance=balance,
-                        min_balance=minimum_balance,
-                    ),
-                )
-            elif user["warning_count"] and user["warning_count"] > 0:
-                await db.reset_warnings(telegram_id)
-                logger.info(
-                    "Warnings reset for telegram_id=%s (balance=%s > %s)",
-                    telegram_id,
-                    balance,
-                    warning_limit,
-                )
 
         except Exception:
             logger.exception(

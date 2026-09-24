@@ -125,6 +125,13 @@ def admin_menu() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
+                    text="ریماندر VIP",
+                    emoji="📣",
+                    callback_data="admin:vip_reminder",
+                ),
+            ],
+            [
+                _button(
                     text="تنظیم کمپین",
                     emoji="🎁",
                     callback_data="admin:campaign",
